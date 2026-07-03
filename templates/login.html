@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登入 | 幣須知道</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- 源泉圓體：用 link 載入（比 @import 穩定，避免有時載不到而退回系統字看起來變細） -->
+    <link rel="stylesheet" href="https://fontsapi.zeoseven.com/303/main/result.css">
+    <style>
+        :root{ --pink:#E2858E; --pink-dark:#C1656E; }
+        *{ font-family:"GenSenRounded2 TC","PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif; }
+        body{ margin:0; min-height:100vh; overflow-x:hidden; font-weight:500;
+              background:linear-gradient(135deg,#F9C0C8 0%,#E98C97 45%,#F6C9AC 100%); }
+
+        /* 背景漂浮光暈（給玻璃折射用） */
+        .blob{ position:fixed; border-radius:50%; filter:blur(70px); opacity:.55; z-index:0; }
+        .b1{ width:420px;height:420px;background:#FF9DB0; top:-120px; left:-80px; animation:drift1 16s ease-in-out infinite; }
+        .b2{ width:360px;height:360px;background:#FFC29A; bottom:-120px; left:30%; animation:drift2 20s ease-in-out infinite; }
+        .b3{ width:300px;height:300px;background:#F5A9CE; top:20%; right:-90px; animation:drift1 24s ease-in-out infinite; }
+        @keyframes drift1{ 0%,100%{transform:translate(0,0)} 50%{transform:translate(30px,40px)} }
+        @keyframes drift2{ 0%,100%{transform:translate(0,0)} 50%{transform:translate(-40px,-30px)} }
+
+        /* 落下的金幣改由下方 JavaScript 動態產生（真實堆疊） */
+
+        /* 背景大字 */
+        .ghost{ position:fixed; left:4%; bottom:6%; font-size:22vw; font-weight:900; line-height:.9;
+                color:rgba(255,255,255,.14); letter-spacing:-.04em; z-index:0; pointer-events:none; user-select:none; }
+
+        /* 漂浮的玻璃小圖示 */
+        .chip{ position:fixed; width:60px;height:60px; border-radius:18px; display:flex;align-items:center;justify-content:center;
+               font-size:28px; background:rgba(255,255,255,.35); backdrop-filter:blur(8px);
+               border:1px solid rgba(255,255,255,.55); box-shadow:0 12px 26px rgba(160,70,80,.18); z-index:1; }
+        .chip:nth-child(1){ top:16%; left:12%; animation:floaty 6s ease-in-out infinite; }
+        .chip:nth-child(2){ top:60%; left:8%;  animation:floaty 7.5s ease-in-out infinite; animation-delay:-2s; }
+        .chip:nth-child(3){ top:74%; left:24%; animation:floaty 6.8s ease-in-out infinite; animation-delay:-1s; }
+        .chip:nth-child(4){ top:24%; left:33%; animation:floaty 8s ease-in-out infinite; animation-delay:-3s; }
+        @keyframes floaty{ 0%,100%{transform:translateY(0) rotate(-4deg)} 50%{transform:translateY(-18px) rotate(4deg)} }
+        @media (max-width:900px){ .chip,.ghost{ display:none; } }
+
+        /* 玻璃登入卡 */
+        .glass{ position:relative; z-index:2; background:rgba(255,255,255,.55); backdrop-filter:blur(20px);
+                border:1px solid rgba(255,255,255,.65); border-radius:26px;
+                box-shadow:0 24px 60px rgba(150,60,72,.28); animation:rise .6s ease-out; }
+        @keyframes rise{ from{opacity:0; transform:translateY(24px)} to{opacity:1; transform:translateY(0)} }
+
+        .btn-guest{ background:linear-gradient(135deg,var(--pink),var(--pink-dark)); box-shadow:0 12px 24px rgba(226,133,142,.45); transition:transform .15s; }
+        .btn-guest:hover{ transform:translateY(-2px) scale(1.015); }
+        .btn-soc{ background:linear-gradient(180deg,#ffffff 0%,#f1f2f6 100%); border:1px solid rgba(255,255,255,.95); border-radius:16px;
+                  box-shadow:0 8px 20px rgba(150,60,72,.14), inset 0 2px 3px rgba(255,255,255,.9), inset 0 -3px 7px rgba(120,80,90,.06); transition:.18s; }
+        .btn-soc:hover{ transform:translateY(-2px); box-shadow:0 13px 28px rgba(150,60,72,.2), inset 0 2px 3px rgba(255,255,255,.95), inset 0 -3px 7px rgba(120,80,90,.06); }
+
+        /* 白色對話框標語（會上下浮動） */
+        .bubble{ position:relative; display:inline-block; background:#fff; color:#2b2b2b; font-weight:800;
+                 font-size:20px; line-height:1.5; padding:16px 22px; border-radius:18px;
+                 box-shadow:0 16px 34px rgba(150,60,72,.22); animation:bob 3s ease-in-out infinite; }
+        .bubble:after{ content:""; position:absolute; left:40px; bottom:-13px; width:0; height:0;
+                 border:13px solid transparent; border-top-color:#fff; border-bottom:0; }
+        @keyframes bob{ 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-9px) } }
+
+        /* 主標題（大字＋字距 75px） */
+        .brand-title{ font-size:92px; line-height:1; letter-spacing:15px; white-space:nowrap;
+                      text-shadow:0 6px 22px rgba(150,60,72,.4); }
+        @media (max-width:1100px){ .brand-title{ font-size:48px; letter-spacing:8px; white-space:normal; } }
+    </style>
+</head>
+<body>
+    <!-- 背景層 -->
+    <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+    <div id="coinLayer" style="position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden"></div>
+
+    <!-- 前景版面 -->
+    <div class="min-h-screen w-full flex flex-col md:flex-row items-center md:justify-between px-8 md:px-20 py-10 relative">
+
+        <!-- 左：品牌 -->
+        <div class="text-white max-w-xl mb-10 md:mb-0 z-[2] drop-shadow">
+            <h1 class="brand-title font-extrabold mb-7">幣須知道！</h1>
+            <div class="bubble">不拿白不拿的人生福利地圖</div>
+            <p class="mt-8 text-lg font-bold leading-relaxed" style="text-shadow:0 2px 10px rgba(150,60,72,.35)">
+                不要再當最後一個知道發錢的人了！<br>把那些原本該進你口袋、卻被你親手放生的福利搶回來！
+            </p>
+        </div>
+
+        <!-- 右：玻璃登入卡 -->
+        <div class="glass w-full max-w-lg p-12">
+            <h2 class="text-3xl font-extrabold text-slate-800 mb-1">登入或建立帳戶</h2>
+            <p class="text-sm font-medium text-slate-600 mb-7">歡迎使用幣須知道，請選擇你的登入管道</p>
+
+            <a href="/guest_login" class="btn-guest w-full flex items-center justify-center text-white font-bold py-4 rounded-xl text-[15px]">
+                訪客快速登入（免註冊，立即體驗）
+            </a>
+
+            <div class="relative flex py-4 items-center">
+                <div class="flex-grow border-t border-white/60"></div>
+                <span class="mx-3 text-slate-500 text-xs font-medium">或使用社群帳號</span>
+                <div class="flex-grow border-t border-white/60"></div>
+            </div>
+
+            <div class="space-y-3">
+                <a href="/login" class="btn-soc w-full flex items-center justify-center gap-3 text-slate-700 font-semibold py-3.5 rounded-2xl text-[15px]">
+                    <svg class="w-5 h-5" viewBox="0 0 48 48">
+                        <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
+                        <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
+                        <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z"/>
+                        <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
+                    </svg>
+                    繼續使用 Google
+                </a>
+                <a href="/login/facebook" class="btn-soc w-full flex items-center justify-center gap-3 text-slate-700 font-semibold py-3.5 rounded-2xl text-[15px]">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#1877F2" d="M24 12c0-6.63-5.37-12-12-12S0 5.37 0 12c0 5.99 4.39 10.95 10.13 11.85v-8.38H7.08V12h3.05V9.41c0-3.01 1.79-4.67 4.53-4.67 1.31 0 2.68.23 2.68.23v2.95h-1.51c-1.49 0-1.95.93-1.95 1.87V12h3.32l-.53 3.47h-2.79v8.38C19.61 22.95 24 17.99 24 12z"/></svg>
+                    繼續使用 Facebook
+                </a>
+                <a href="/login/line" class="btn-soc w-full flex items-center justify-center gap-3 text-slate-700 font-semibold py-3.5 rounded-2xl text-[15px]">
+                    <svg class="w-5 h-5" viewBox="0 0 40 40"><rect width="40" height="40" rx="10" fill="#06C755"/><path fill="#fff" d="M20 9c-6.6 0-12 4.35-12 9.7 0 4.8 4.28 8.82 10.06 9.58.39.08.92.26 1.06.6.12.3.08.77.04 1.08l-.17 1.03c-.05.3-.24 1.18 1.04.64 1.28-.54 6.86-4.04 9.36-6.92C31.4 22.65 32 20.73 32 18.7 32 13.35 26.6 9 20 9z"/><text x="20" y="19.5" font-size="6.5" font-weight="800" fill="#06C755" text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" letter-spacing="0.3">LINE</text></svg>
+                    繼續使用 LINE
+                </a>
+            </div>
+
+            <p class="text-sm font-medium text-slate-500 mt-6 text-center">登入後系統會請你填寫年齡與縣市，用來過濾符合你的補助。</p>
+        </div>
+    </div>
+
+    <!-- 金幣：不同角度、緩慢持續落下（淡淡的背景裝飾，不堆疊） -->
+    <script>
+    (function(){
+      const layer = document.getElementById('coinLayer');
+      const COIN_SRC = '/static/coin.png';   // 金幣圖檔（放在 static/ 資料夾）
+      const COUNT = 9;                        // 同時在畫面上的金幣數
+      const rnd = (a,b)=> a + Math.random()*(b-a);
+      const coins = [];
+
+      function reset(c, spread){
+        c.size = rnd(96, 168);                // 更大顆
+        c.x = rnd(0, Math.max(0, window.innerWidth - c.size));
+        c.y = spread ? rnd(-window.innerHeight, -c.size) : -c.size - 20;
+        c.vy = rnd(0.6, 1.2);                 // 緩慢落下
+        c.vx = rnd(-0.35, 0.35);
+        c.rot = rnd(-18, 18); c.vr = rnd(-0.8, 0.8);  // 只做小幅平面轉，保留金幣厚度
+        c.el.style.width = c.size + 'px';
+      }
+
+      for(let i=0;i<COUNT;i++){
+        const img = document.createElement('img');
+        img.src = COIN_SRC;
+        img.style.cssText = 'position:absolute;height:auto;opacity:.22;will-change:transform;'+
+          'filter:drop-shadow(0 6px 10px rgba(150,90,40,.15));';
+        layer.appendChild(img);
+        const c = { el: img }; reset(c, true); coins.push(c);
+      }
+
+      function step(){
+        const h = window.innerHeight;
+        for(const c of coins){
+          c.vy += 0.012; c.y += c.vy; c.x += c.vx; c.rot += c.vr;
+          if(c.y > h + 50) reset(c, false);   // 掉出畫面就從上面重新落下
+          c.el.style.transform = 'translate('+c.x+'px,'+c.y+'px) rotate('+c.rot+'deg)';
+        }
+        requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    })();
+    </script>
+</body>
+</html>

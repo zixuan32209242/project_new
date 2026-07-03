@@ -1,0 +1,19 @@
+# 環境變數與金鑰（絕對不要提交）
+.env
+.env.*
+!.env.example
+
+# 資料庫（由 init_db.py 產生）
+subsidies.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 編輯器 / 系統
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

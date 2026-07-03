@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>幣須知道！</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Leaflet 地圖 -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Chart.js 圖表 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: { extend: {
+                colors: {
+                    brand: { light: '#FFB7B2', DEFAULT: '#E2858E', dark: '#C1656E' },
+                    surface: '#F8F9FA'
+                },
+                boxShadow: {
+                    'card': '0 4px 12px rgba(0,0,0,0.04)',
+                    'glow': '0 10px 20px rgba(226, 133, 142, 0.3)'
+                }
+            }}
+        }
+    </script>
+    <link rel="stylesheet" href="https://fontsapi.zeoseven.com/303/main/result.css">
+    <style>
+        body { font-family: "GenSenRounded2 TC", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif; font-weight:500; font-size:16px; }
+        /* ── 全站可讀性基準（中高齡友善／通用設計）──
+           略放大最小字級、加深低對比灰字，讓首頁/錢包/快篩與地圖一致好讀。
+           用 !important 覆蓋 Tailwind CDN 執行時注入的樣式。 */
+        .text-xs  { font-size: 0.8125rem !important; line-height: 1.15rem !important; }  /* 12→13px */
+        .text-sm  { font-size: 0.9375rem !important; line-height: 1.45rem !important; }  /* 14→15px */
+        .text-base{ font-size: 1.0625rem !important; line-height: 1.6rem  !important; }  /* 16→17px */
+        .text-gray-400 { color:#6B7280 !important; }  /* 提高對比：gray-400→gray-500 */
+        .text-gray-300 { color:#9CA3AF !important; }  /* gray-300→gray-400 */
+        .text-slate-500{ color:#475569 !important; }  /* 導覽/次要文字加深 */
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        .slide-up { animation: slideUp 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        #map, #trip-map { height: 100%; width: 100%; border-radius: 1rem; z-index: 0; }
+        .leaflet-container { font-family: inherit; }
+    </style>
+</head>
+<body class="bg-surface text-slate-800 antialiased h-screen overflow-hidden flex flex-col md:flex-row">
+
+{% if not user.age or not user.city %}
+<!-- ═══════════════ 首次登入：問卷 onboarding ═══════════════ -->
+<div id="ob-root" class="min-h-screen w-full flex items-center justify-center p-4 transition-[background] duration-700" style="background:linear-gradient(180deg,#FBE4E7 0%,#F7F8FB 60%)">
+    <style>
+        .ob-card{ position:absolute; inset:0; background:#fff; border-radius:28px; padding:34px 32px;
+                  box-shadow:0 24px 60px rgba(80,80,120,.16);
+                  transition:transform .55s cubic-bezier(.22,1,.36,1), opacity .5s ease; }
+        .ob-clip{ position:absolute; inset:0; border-radius:28px; overflow:hidden; pointer-events:none; }
+        .ob-bloom{ position:absolute; bottom:-52px; right:-52px; width:200px; height:200px; border-radius:50%; filter:blur(44px); opacity:.55; pointer-events:none; }
+        .ob-pill{ display:inline-flex; align-items:center; gap:7px; color:#fff; font-weight:800; font-size:14px; padding:12px 26px; border-radius:9999px; box-shadow:0 8px 18px rgba(0,0,0,.12); transition:transform .15s, filter .15s; cursor:pointer; }
+        .ob-pill:hover{ filter:brightness(1.06); transform:translateY(-1px); }
+        .ob-back{ background:#F1F2F5 !important; color:#8A8F98; box-shadow:none; }
+        .ob-field{ width:100%; padding:14px 16px; background:#F7F8FA; border:1px solid transparent; border-radius:16px; font-size:15px; font-weight:500; color:#334155; outline:none; transition:.2s; }
+        .ob-field:focus{ background:#fff; box-shadow:0 0 0 2px rgba(120,120,140,.25); }
+        /* 自訂下拉選單（每項對應顏色、不反藍、留白大、medium 字重） */
+        .cs{ position:relative; }
+        .cs-trigger{ width:100%; display:flex; align-items:center; gap:10px; padding:14px 16px; background:#F7F8FA; border:1px solid transparent; border-radius:16px; font-size:15px; font-weight:500; color:#334155; cursor:pointer; }
+        .cs-trigger:hover{ background:#fff; box-shadow:0 0 0 2px rgba(120,120,140,.15); }
+        .cs-panel{ display:none; position:absolute; top:calc(100% + 6px); left:0; right:0; background:#fff; border-radius:18px; box-shadow:0 20px 46px rgba(50,50,80,.18); padding:8px; z-index:9999; max-height:290px; overflow-y:auto; }
+        .cs.open .cs-panel{ display:block; }
+        .cs-opt{ display:flex; align-items:center; gap:12px; padding:14px 14px; border-radius:12px; font-size:15px; font-weight:500; color:#475569; cursor:pointer; transition:background .15s, color .15s; }
+        .cs-opt:hover{ background:#F3F4F6; }
+        .cs-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    </style>
+
+    <div class="w-full max-w-md">
+        <div class="relative" style="height:430px">
+            <!-- 第 1 題：年齡（粉） -->
+            <div class="ob-card" data-step="1" data-bg="linear-gradient(180deg,#FBE4E7 0%,#F7F8FB 60%)">
+                <div class="ob-clip"><div class="ob-bloom" style="background:radial-gradient(circle,#F9A8D4 0%,#FBBF77 60%,transparent 78%)"></div></div>
+                <div class="relative">
+                    <div class="text-6xl leading-none text-slate-200 font-serif select-none">“</div>
+                    <h2 class="text-[27px] font-extrabold text-slate-800 -mt-4"><span id="greet">午安</span>，{{ user.name }}！</h2>
+                    <p class="text-gray-400 text-sm mt-2 mb-7">先問你的年齡，幫你對齊補助資格</p>
+                    <label class="block text-xs text-gray-400 mb-1.5 font-bold">你的年齡</label>
+                    <input type="number" id="inline-age" min="1" max="120" placeholder="例如：26" class="ob-field">
+                    <div class="flex justify-end mt-8">
+                        <button onclick="obNext(1)" class="ob-pill" style="background:#E2858E"><i class="fas fa-comment-dots"></i> 下一題</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第 2 題：縣市（蒂芬妮藍） -->
+            <div class="ob-card" data-step="2" data-bg="linear-gradient(180deg,#D6F3EF 0%,#F7F8FB 60%)">
+                <div class="ob-clip"><div class="ob-bloom" style="background:radial-gradient(circle,#5FD4C9 0%,#A0E8E0 60%,transparent 78%)"></div></div>
+                <div class="relative">
+                    <div class="text-6xl leading-none text-slate-200 font-serif select-none">“</div>
+                    <h2 class="text-[24px] font-extrabold text-slate-800 -mt-3">你住在哪個縣市？</h2>
+                    <p class="text-gray-400 text-sm mt-2 mb-7">用來過濾在地限定的補助</p>
+                    <label class="block text-xs text-gray-400 mb-1.5 font-bold">設籍或生活縣市</label>
+                    <div class="cs">
+                        <input type="hidden" id="inline-city" value="台北市">
+                        <button type="button" class="cs-trigger" onclick="csToggle(this)">
+                            <span class="cs-label flex-1 text-left">台北市</span>
+                            <i class="fas fa-chevron-down text-gray-300 text-xs"></i>
+                        </button>
+                        <div class="cs-panel">
+                            <div class="cs-opt" data-value="台北市" onclick="csPick(this)">台北市</div>
+                            <div class="cs-opt" data-value="新北市" onclick="csPick(this)">新北市</div>
+                            <div class="cs-opt" data-value="桃園市" onclick="csPick(this)">桃園市</div>
+                            <div class="cs-opt" data-value="台中市" onclick="csPick(this)">台中市</div>
+                            <div class="cs-opt" data-value="台南市" onclick="csPick(this)">台南市</div>
+                            <div class="cs-opt" data-value="高雄市" onclick="csPick(this)">高雄市</div>
+                            <div class="cs-opt" data-value="新竹縣" onclick="csPick(this)">新竹縣</div>
+                            <div class="cs-opt" data-value="苗栗縣" onclick="csPick(this)">苗栗縣</div>
+                            <div class="cs-opt" data-value="屏東縣" onclick="csPick(this)">屏東縣</div>
+                            <div class="cs-opt" data-value="全台" onclick="csPick(this)">其他 / 全台通用</div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-8">
+                        <button onclick="obPrev(2)" class="ob-pill ob-back">← 上一題</button>
+                        <button onclick="obNext(2)" class="ob-pill" style="background:#2BC4B8"><i class="fas fa-comment-dots"></i> 下一題</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第 3 題：興趣（淺橘黃） -->
+            <div class="ob-card" data-step="3" data-bg="linear-gradient(180deg,#FCEBD1 0%,#F7F8FB 60%)">
+                <div class="ob-clip"><div class="ob-bloom" style="background:radial-gradient(circle,#F6B24C 0%,#FBD79A 60%,transparent 78%)"></div></div>
+                <div class="relative">
+                    <div class="text-6xl leading-none text-slate-200 font-serif select-none">“</div>
+                    <h2 class="text-[24px] font-extrabold text-slate-800 -mt-3">最感興趣的類別？</h2>
+                    <p class="text-gray-400 text-sm mt-2 mb-7">幫你把最相關的排在前面</p>
+                    <label class="block text-xs text-gray-400 mb-1.5 font-bold">興趣類別</label>
+                    <div class="cs">
+                        <input type="hidden" id="inline-interest" value="藝文">
+                        <button type="button" class="cs-trigger" onclick="csToggle(this)">
+                            <span class="cs-dot" style="background:#EC6B8E"></span>
+                            <span class="cs-label flex-1 text-left">藝文（看展、電影、書）</span>
+                            <i class="fas fa-chevron-down text-gray-300 text-xs"></i>
+                        </button>
+                        <div class="cs-panel">
+                            <div class="cs-opt" data-value="藝文" data-color="#EC6B8E" onclick="csPick(this)"><span class="cs-dot" style="background:#EC6B8E"></span>藝文（看展、電影、書）</div>
+                            <div class="cs-opt" data-value="運動" data-color="#22B8C1" onclick="csPick(this)"><span class="cs-dot" style="background:#22B8C1"></span>運動（健身、賽事）</div>
+                            <div class="cs-opt" data-value="旅遊" data-color="#3FB984" onclick="csPick(this)"><span class="cs-dot" style="background:#3FB984"></span>旅遊（部落、客庄、農遊）</div>
+                            <div class="cs-opt" data-value="居住" data-color="#F0A93B" onclick="csPick(this)"><span class="cs-dot" style="background:#F0A93B"></span>居住（租屋補貼）</div>
+                            <div class="cs-opt" data-value="就業" data-color="#7C6BF0" onclick="csPick(this)"><span class="cs-dot" style="background:#7C6BF0"></span>就業（進修、轉職）</div>
+                            <div class="cs-opt" data-value="生活" data-color="#F26D5B" onclick="csPick(this)"><span class="cs-dot" style="background:#F26D5B"></span>生活（社福、交通、育兒）</div>
+                            <div class="cs-opt" data-value="其他" data-color="#94A3B8" onclick="csPick(this)"><span class="cs-dot" style="background:#94A3B8"></span>其他 / 都看看</div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-8">
+                        <button onclick="obPrev(3)" class="ob-pill ob-back">← 上一題</button>
+                        <button onclick="submitInlineSetup()" class="ob-pill" style="background:#F5A623"><i class="fas fa-check"></i> 完成</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 進度點 -->
+        <div id="ob-dots" class="flex gap-1.5 justify-center mt-7"></div>
+    </div>
+</div>
+
+<script>
+/* 依時段設定問候語 */
+(function(){ const h=new Date().getHours(); const el=document.getElementById('greet');
+  if(el) el.textContent = (h<5?'夜深了':h<11?'早安':h<18?'午安':'晚安'); })();
+
+/* 卡片堆疊：逐張浮現、作答後落到後面、背景隨卡片色 */
+let obCur = 1;
+const OB_ACC = {1:'#E2858E',2:'#2BC4B8',3:'#F5A623'};
+function obDots(n){ const d=document.getElementById('ob-dots'); if(!d) return;
+  d.innerHTML=[1,2,3].map(i=>`<span class="h-1.5 rounded-full transition-all" style="width:${i===n?'24px':'8px'};background:${i===n?OB_ACC[i]:'#DADDE2'}"></span>`).join(''); }
+function positionCards(){
+  document.querySelectorAll('.ob-card').forEach(c=>{
+    const step=+c.dataset.step, d=step-obCur;
+    if(d===0){ c.style.transform='translateY(0) scale(1)'; c.style.zIndex=30; c.style.opacity=1; c.style.pointerEvents='auto'; }
+    else if(d>0){ c.style.transform=`translateY(${-16*d}px) scale(${1-0.05*d})`; c.style.zIndex=30-d; c.style.opacity=1; c.style.pointerEvents='none'; }
+    else { c.style.transform='translateY(60px) scale(0.92)'; c.style.zIndex=5; c.style.opacity=0; c.style.pointerEvents='none'; }
+  });
+  const cur=document.querySelector('.ob-card[data-step="'+obCur+'"]');
+  const root=document.getElementById('ob-root');
+  if(cur && root && cur.dataset.bg) root.style.background=cur.dataset.bg;
+  obDots(obCur);
+}
+function obNext(n){ if(n===1){ const a=parseInt(document.getElementById('inline-age').value); if(isNaN(a)||a<1||a>120){ alert('請填有效年齡（1–120 歲）'); return; } } obCur=n+1; positionCards(); }
+function obPrev(n){ obCur=n-1; positionCards(); }
+positionCards();
+
+/* ── 自訂下拉選單 ── */
+function hexA(h,a){ const n=parseInt(h.slice(1),16); return 'rgba('+(n>>16&255)+','+((n>>8)&255)+','+(n&255)+','+a+')'; }
+function csApply(cs, opt){
+    const input=cs.querySelector('input'); input.value=opt.dataset.value;
+    const color=opt.dataset.color;
+    const trig=cs.querySelector('.cs-trigger');
+    trig.querySelector('.cs-label').textContent=opt.textContent.trim();
+    const tdot=trig.querySelector('.cs-dot'); if(tdot && color){ tdot.style.background=color; }
+    cs.querySelectorAll('.cs-opt').forEach(o=>{ o.style.background=''; o.style.color=''; });
+    if(color){ opt.style.background=hexA(color,0.14); opt.style.color=color; }
+    else     { opt.style.background='#EEF0F3'; opt.style.color='#111827'; }
+}
+function csPick(opt){ const cs=opt.closest('.cs'); csApply(cs, opt); cs.classList.remove('open'); }
+function csToggle(btn){
+    const cs=btn.closest('.cs'); const willOpen=!cs.classList.contains('open');
+    document.querySelectorAll('.cs.open').forEach(x=>x.classList.remove('open'));
+    if(willOpen) cs.classList.add('open');
+}
+document.addEventListener('click', e=>{ if(!e.target.closest('.cs')) document.querySelectorAll('.cs.open').forEach(x=>x.classList.remove('open')); });
+/* 初始化預設選取樣式 */
+document.querySelectorAll('.cs').forEach(cs=>{ const v=cs.querySelector('input').value;
+    cs.querySelectorAll('.cs-opt').forEach(o=>{ if(o.dataset.value===v) csApply(cs, o); }); });
+
+/* 電腦版：按 Enter 直接下一題／完成 */
+document.addEventListener('keydown', function(e){
+    if(e.key!=='Enter') return;
+    if(!document.querySelector('.ob-card')) return;   // 只在問卷頁生效
+    if(document.querySelector('.cs.open')) return;     // 下拉開著時不觸發
+    e.preventDefault();
+    if(obCur===1) obNext(1);
+    else if(obCur===2) obNext(2);
+    else if(obCur===3) submitInlineSetup();
+});
+
+async function submitInlineSetup() {
+    const age = parseInt(document.getElementById('inline-age').value);
+    const city = document.getElementById('inline-city').value;
+    const interest = document.getElementById('inline-interest').value;
+    if (isNaN(age) || age<1 || age>120) { alert('請填有效年齡（1–120 歲）'); return; }
+    const res = await fetch('/update_profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ age, city, interest })
+    });
+    if (res.ok) location.reload();
+    else alert('儲存失敗，請稍後再試');
+}
+</script>
+
+{% else %}
+<!-- ═══════════════ 主應用程式 ═══════════════ -->
+
+<!-- 側邊欄（桌機） -->
+<aside class="hidden md:flex flex-col w-64 bg-white border-r border-gray-100 h-full p-6 shadow-sm z-20">
+    <div class="flex items-center gap-3 mb-8">
+        <h1 class="text-2xl font-extrabold text-slate-800 tracking-tight">幣須知道！</h1>
+    </div>
+    <nav class="flex-1 space-y-1 overflow-y-auto no-scrollbar">
+        <div class="text-[11px] font-bold text-gray-300 tracking-widest px-4 pt-2 pb-1">個人中心</div>
+        <button data-page="dashboard" onclick="navigate('dashboard')" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left font-medium transition-colors">
+            <i class="fas fa-house w-5"></i> 總覽首頁
+        </button>
+        <button data-page="wallet" onclick="navigate('wallet')" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left font-medium transition-colors">
+            <i class="fas fa-wallet w-5"></i> 我的錢包
+        </button>
+
+        <div class="text-[11px] font-bold text-gray-300 tracking-widest px-4 pt-4 pb-1">找好康</div>
+        <button data-page="points" onclick="navigate('points')" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left font-medium transition-colors">
+            <i class="fas fa-ticket w-5"></i> 點數與票券
+        </button>
+        <button data-page="welfare" onclick="navigate('welfare')" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left font-medium transition-colors">
+            <i class="fas fa-hand-holding-heart w-5"></i> 權益與津貼
+        </button>
+
+        <div class="text-[11px] font-bold text-gray-300 tracking-widest px-4 pt-4 pb-1">出門去</div>
+        <button data-page="map" onclick="navigate('map')" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left font-medium transition-colors">
+            <i class="fas fa-map-location-dot w-5"></i> 消費地圖
+        </button>
+        <button data-page="itinerary" onclick="navigate('itinerary')" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left font-medium transition-colors">
+            <i class="fas fa-route w-5"></i> 行程規劃
+        </button>
+    </nav>
+    <div class="mt-auto p-4 bg-gray-50 rounded-xl flex items-center gap-3 border border-gray-100">
+        <img src="{{ user.picture }}" alt="Avatar" class="w-8 h-8 rounded-full object-cover">
+        <div class="text-sm min-w-0">
+            <div class="font-bold truncate">{{ user.name }}</div>
+            <div class="text-gray-400 text-xs">{{ user.city }} · <a href="/logout" class="text-red-500 no-underline">登出</a></div>
+        </div>
+    </div>
+</aside>
+
+<!-- 主內容 -->
+<main class="flex-1 h-full overflow-y-auto no-scrollbar relative pb-24 md:pb-6">
+    <div id="view-dashboard" class="p-5 md:p-8 fade-in"></div>
+    <div id="view-wallet" class="p-5 md:p-8 hidden"></div>
+    <div id="view-search" class="p-5 md:p-8 hidden"></div>
+    <div id="view-map" class="p-5 md:p-8 hidden h-full flex flex-col"></div>
+    <div id="view-itinerary" class="p-5 md:p-8 hidden"></div>
+</main>
+
+<!-- 手機底部導覽 -->
+<nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around py-2 z-30 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+    <button data-page="dashboard" onclick="navigate('dashboard')" class="mnav-btn flex flex-col items-center gap-0.5 px-2 py-1 text-xs"><i class="fas fa-house"></i>首頁</button>
+    <button data-page="wallet" onclick="navigate('wallet')" class="mnav-btn flex flex-col items-center gap-0.5 px-2 py-1 text-xs"><i class="fas fa-wallet"></i>錢包</button>
+    <button data-page="points" onclick="navigate('points')" class="mnav-btn flex flex-col items-center gap-0.5 px-2 py-1 text-xs"><i class="fas fa-ticket"></i>點數</button>
+    <button data-page="welfare" onclick="navigate('welfare')" class="mnav-btn flex flex-col items-center gap-0.5 px-2 py-1 text-xs"><i class="fas fa-hand-holding-heart"></i>權益</button>
+    <button data-page="map" onclick="navigate('map')" class="mnav-btn flex flex-col items-center gap-0.5 px-2 py-1 text-xs"><i class="fas fa-map-location-dot"></i>地圖</button>
+    <button data-page="itinerary" onclick="navigate('itinerary')" class="mnav-btn flex flex-col items-center gap-0.5 px-2 py-1 text-xs"><i class="fas fa-route"></i>行程</button>
+</nav>
+
+<!-- 懶人包 詳情彈窗 -->
+<div id="detail-modal" class="hidden fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeDetail()"></div>
+    <div id="detail-body" class="relative bg-white w-full md:max-w-lg max-h-[90vh] overflow-y-auto no-scrollbar rounded-t-3xl md:rounded-3xl shadow-2xl slide-up"></div>
+</div>
+
+<script>
+/* ═══════════════ 資料（由 Flask 後端注入）═══════════════ */
+const SUBSIDIES = {{ subsidies | tojson }};
+const STORES    = {{ stores | tojson }};
+const USER      = {{ user | tojson }};
+let   CLAIMED   = new Set({{ claimed | tojson }});
+
+/* Google Maps 金鑰（後端由 .env 注入；空字串＝退回 Leaflet+OSM） */
+const GMAPS_KEY = "{{ maps_key }}";
+const USE_GMAPS = GMAPS_KEY.trim().length > 0;
+
+/* ── Google Maps JS 動態載入（只有有金鑰時才載，載一次，用 Promise 排隊）── */
+let _gmapsPromise = null;
+function loadGmaps(){
+    if(!USE_GMAPS) return Promise.reject('no-key');
+    if(_gmapsPromise) return _gmapsPromise;
+    _gmapsPromise = new Promise((resolve,reject)=>{
+        // callback 版：API 核心完全就緒才 resolve，避免 async 載入的競態
+        window.__gmapsReady = ()=>resolve(window.google);
+        const s=document.createElement('script');
+        s.src=`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GMAPS_KEY)}&loading=async&language=zh-TW&region=TW&callback=__gmapsReady`;
+        s.async=true;
+        s.onerror=()=>reject('load-error');
+        document.head.appendChild(s);
+    });
+    return _gmapsPromise;
+}
+/* 產生「用 Google 地圖導航」連結（免金鑰，任何情境都可用） */
+function navUrl(lat,lng,label){
+    // 起點＝使用者目前位置（Google 自動帶入），終點＝店家座標
+    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+}
+
+/* 縣市中心座標（給地圖定位） */
+const CITY_CENTER = {
+    '台北市':[25.0375,121.5637],'新北市':[25.0169,121.4628],'桃園市':[24.9936,121.3010],
+    '台中市':[24.1477,120.6736],'台南市':[22.9999,120.2270],'高雄市':[22.6273,120.3014],
+    '新竹縣':[24.8387,121.0177],'苗栗縣':[24.5602,120.8214],'屏東縣':[22.5519,120.5487],
+    '全台':[23.9,120.9]
+};
+const CAT_ICON = { '藝文':'🎭','運動':'🏃','旅遊':'🌾','居住':'🏠','就業':'🚀','生活':'💳' };
+const STATUS_STYLE = {
+    '開放領取':'bg-green-100 text-green-700','開放報名':'bg-green-100 text-green-700',
+    '登記抽籤':'bg-amber-100 text-amber-700','即將開放':'bg-blue-100 text-blue-700',
+    '已結束':'bg-gray-100 text-gray-500','示範資料':'bg-purple-100 text-purple-600'
+};
+
+/* ═══════════════ 小工具 ═══════════════ */
+function fmtDate(iso){ if(!iso) return '—'; const [y,m,d]=iso.split('-'); return `${y}/${m}/${d}`; }
+/* 資格三態：yes（符合）/ maybe（年齡不符但有身分別例外，需確認）/ no（不符） */
+function eligStatus(s){
+    const okCity = s.target_city==='全台' || s.target_city===USER.city;
+    if(!okCity) return 'no';
+    if(USER.age==null) return 'yes';
+    if(USER.age>=s.min_age && USER.age<=s.max_age) return 'yes';
+    return (s.age_flex==1) ? 'maybe' : 'no';   // 有身分別例外就標「需確認」，不直接排除（A2）
+}
+function eligible(s){ return eligStatus(s)==='yes'; }
+function isActive(s){ return ['開放領取','開放報名','登記抽籤','即將開放'].includes(s.status); }
+function scoreForUser(s){
+    let sc=0;
+    if(s.category===USER.interest) sc+=4;
+    if(eligible(s)) sc+=3;
+    if(isActive(s)) sc+=2;
+    if(s.target_city===USER.city) sc+=1;
+    return sc;
+}
+function haversine(a,b,c,d){
+    const R=6371,toR=x=>x*Math.PI/180;
+    const dLat=toR(c-a),dLng=toR(d-b);
+    const x=Math.sin(dLat/2)**2+Math.cos(toR(a))*Math.cos(toR(c))*Math.sin(dLng/2)**2;
+    return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+function statusBadge(s){
+    return `<span class="text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_STYLE[s.status]||'bg-gray-100 text-gray-500'}">${s.status}</span>`;
+}
+/* 從補助金額文字抓出一個代表性的「元」數（給省錢戰績用，示範估算） */
+function extractNT(txt){
+    if(!txt) return 0;
+    txt = String(txt).replace(/,/g,'');
+    let m = txt.match(/(\d+(?:\.\d+)?)\s*萬/);      // 例：10 萬
+    if(m) return Math.round(parseFloat(m[1])*10000);
+    m = txt.match(/(\d+)\s*(?:元|點)/g);             // 取最後一個「元/點」數字（通常是上限）
+    if(m){ const last=m[m.length-1].match(/\d+/); if(last) return parseInt(last[0]); }
+    m = txt.match(/(\d+)/);
+    return m ? parseInt(m[1]) : 0;
+}
+/* 省錢戰績圓餅圖 */
+let __savingsChart = null;
+function initSavingsChart(byType){
+    const ctx = document.getElementById('savingsChart');
+    if(!ctx || typeof Chart === 'undefined') return;
+    if(__savingsChart) __savingsChart.destroy();
+    const labels = Object.keys(byType).filter(k=>byType[k]>0);
+    const palette = {'點數':'#F59E0B','津貼':'#EC4899','場館':'#10B981','節慶':'#8B5CF6','其他':'#9CA3AF'};
+    __savingsChart = new Chart(ctx, {
+        type:'doughnut',
+        data:{
+            labels: labels.length?labels:['尚未領取'],
+            datasets:[{ data: labels.length?labels.map(l=>byType[l]):[1],
+                backgroundColor: labels.length?labels.map(l=>palette[l]||'#9CA3AF'):['#E5E7EB'], borderWidth:0 }]
+        },
+        options:{ cutout:'66%', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} } }
+    });
+}
+
+/* ═══════════════ 導覽切換 ═══════════════ */
+let mapObj=null, tripMapObj=null;
+/* 每個頁面對應的內容區塊 */
+const PAGE_VIEW = { dashboard:'dashboard', wallet:'wallet', points:'search', welfare:'search', map:'map', itinerary:'itinerary' };
+/* 兩條快篩動線對應的四大分類 */
+const SCOPES = {
+    points:  { types:['點數','節慶'], title:'🎟️ 點數與票券快篩', sub:'找可以花掉的點數、票券與近期限定活動' },
+    welfare: { types:['津貼','場館'], title:'🛡️ 權益與津貼查詢', sub:'找租補、就業、婦幼、場館等長效型福利' },
+};
+function navigate(page){
+    const view = PAGE_VIEW[page] || 'dashboard';
+    ['dashboard','wallet','search','map','itinerary'].forEach(v=>{
+        document.getElementById('view-'+v).classList.toggle('hidden', v!==view);
+    });
+    document.querySelectorAll('.nav-btn').forEach(b=>{
+        const on = b.dataset.page===page;
+        b.className = `nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left font-medium transition-colors ${on?'bg-brand/10 text-brand':'text-slate-500 hover:bg-gray-50'}`;
+    });
+    document.querySelectorAll('.mnav-btn').forEach(b=>{
+        b.className = `mnav-btn flex flex-col items-center gap-0.5 px-2 py-1 text-xs ${b.dataset.page===page?'text-brand font-bold':'text-slate-400'}`;
+    });
+    if(page==='wallet') renderWallet();
+    if(page==='points' || page==='welfare'){ const sc=SCOPES[page]; renderSearch(sc.types, sc.title, sc.sub); }
+    if(page==='map') setTimeout(initMap,100);
+    if(page==='itinerary') renderItinerary();
+}
+
+/* ═══════════════ 一站式錢包 ═══════════════ */
+function daysLeft(iso){ if(!iso) return null; const d=new Date(iso+'T23:59:59'); return Math.ceil((d-new Date())/86400000); }
+function renderWallet(){
+    const UT_COLOR = {'點數':'#F59E0B','津貼':'#EC4899','場館':'#10B981','節慶':'#8B5CF6'};
+    const owned = SUBSIDIES.filter(s=>CLAIMED.has(s.id));
+    const box = document.getElementById('view-wallet');
+
+    if(owned.length===0){
+        box.innerHTML = `
+        <div class="max-w-3xl mx-auto">
+            <h2 class="text-2xl md:text-3xl font-bold mb-1">👛 我的錢包</h2>
+            <p class="text-gray-400 text-sm mb-6">你手上所有政策點數與券，一站看清楚、不漏過期</p>
+            <div class="bg-white rounded-2xl shadow-card p-10 text-center">
+                <div class="text-5xl mb-3">🪙</div>
+                <p class="text-gray-500 mb-4">錢包還是空的～到「找好康」把想用的券加進來吧！</p>
+                <button onclick="navigate('points')" class="bg-brand text-white font-bold px-6 py-2.5 rounded-xl hover:bg-brand-dark transition">去挑券 →</button>
+            </div>
+        </div>`;
+        return;
+    }
+
+    const rows = owned.map(s=>({ s, d:daysLeft(s.deadline), expired:s.status==='已結束' }));
+    rows.sort((a,b)=>{ const av=(a.expired||a.d==null)?99999:a.d, bv=(b.expired||b.d==null)?99999:b.d; return av-bv; });
+    const totalValue   = owned.reduce((sum,s)=>sum+(Number(s.value_min)||0),0);
+    const expiringSoon = rows.filter(x=>!x.expired && x.d!=null && x.d>=0 && x.d<=30);
+
+    let html = `
+    <div class="max-w-3xl mx-auto">
+        <h2 class="text-2xl md:text-3xl font-bold mb-1">👛 我的錢包</h2>
+        <p class="text-gray-400 text-sm mb-5">你手上所有政策點數與券，一站看清楚、不漏過期</p>
+
+        <div class="grid grid-cols-3 gap-3 mb-6">
+            <div class="bg-white rounded-2xl p-4 shadow-card text-center">
+                <div class="text-2xl font-bold text-amber-600">$${totalValue.toLocaleString()}</div>
+                <div class="text-xs text-gray-400 mt-1">錢包總值(估)</div>
+            </div>
+            <div class="bg-white rounded-2xl p-4 shadow-card text-center">
+                <div class="text-2xl font-bold text-slate-800">${owned.length}</div>
+                <div class="text-xs text-gray-400 mt-1">張券／點數</div>
+            </div>
+            <div class="bg-white rounded-2xl p-4 shadow-card text-center">
+                <div class="text-2xl font-bold ${expiringSoon.length?'text-red-500':'text-slate-800'}">${expiringSoon.length}</div>
+                <div class="text-xs text-gray-400 mt-1">30 天內到期</div>
+            </div>
+        </div>`;
+
+    if(expiringSoon.length){
+        html += `<div class="bg-red-50 border border-red-100 rounded-2xl p-4 mb-6">
+            <div class="font-bold text-red-600 text-sm mb-2">⏰ 即將到期，別浪費！</div>
+            ${expiringSoon.map(x=>`
+            <div onclick="openDetail(${x.s.id})" class="flex items-center gap-2 py-1.5 cursor-pointer">
+                <span class="text-lg">${x.s.icon}</span>
+                <span class="flex-1 text-sm font-medium truncate">${x.s.title}</span>
+                <span class="text-xs font-bold text-red-600 whitespace-nowrap">${x.s.value_min?('$'+Number(x.s.value_min).toLocaleString()+'・'):''}剩 ${x.d} 天</span>
+            </div>`).join('')}
+        </div>`;
+    }
+
+    // 依四大分類分區整理
+    const GROUPS = [
+        {key:'點數', label:'數位點數・消費金', icon:'🪙'},
+        {key:'津貼', label:'權益・津貼',       icon:'🛡️'},
+        {key:'場館', label:'場館・在地折扣',   icon:'🏛️'},
+        {key:'節慶', label:'期間限定活動',     icon:'🎪'},
+    ];
+    const walletCard = (x)=>{
+        const s=x.s;
+        const expired = x.expired || (x.d!=null && x.d<0);
+        const c = expired ? '#9CA3AF' : (UT_COLOR[s.use_type]||'#9CA3AF');   // 過期→反灰
+        const dLabel = expired ? (x.expired?'已結束':'已過期') : (x.d==null ? '常態' : `剩 ${x.d} 天`);
+        const badge  = expired ? 'bg-black/25 text-white' : (x.d<=30 ? 'bg-white text-red-600' : (x.d<=60 ? 'bg-white text-amber-700' : 'bg-black/25 text-white'));
+        return `<div onclick="openDetail(${s.id})" class="rounded-2xl p-5 shadow-card cursor-pointer hover:shadow-glow transition text-white ${expired?'opacity-70':''}" style="background:linear-gradient(135deg,${c},${c}cc)">
+            <div class="flex items-start justify-between">
+                <div class="text-3xl">${s.icon}</div>
+                <span class="text-[11px] font-bold px-2 py-0.5 rounded-full ${badge}">${dLabel}</span>
+            </div>
+            <div class="font-bold mt-3 leading-tight">${s.title}</div>
+            <div class="text-2xl font-extrabold mt-2">${s.value_min?('$'+Number(s.value_min).toLocaleString()):s.amount}</div>
+            <div class="text-xs opacity-90 mt-1">${s.target_city}・${fmtDate(s.deadline)} 到期</div>
+        </div>`;
+    };
+    const seen = new Set();
+    GROUPS.forEach(g=>{
+        const items = rows.filter(x=>x.s.use_type===g.key);
+        if(!items.length) return;
+        items.forEach(x=>seen.add(x.s.id));
+        html += `<div class="flex items-center gap-2 mt-7 mb-3">
+            <span class="text-lg">${g.icon}</span>
+            <h3 class="font-bold text-slate-700">${g.label}</h3>
+            <span class="text-[11px] text-white font-bold px-2 py-0.5 rounded-full" style="background:${UT_COLOR[g.key]}">${items.length}</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">${items.map(walletCard).join('')}</div>`;
+    });
+    const others = rows.filter(x=>!seen.has(x.s.id));
+    if(others.length){
+        html += `<div class="flex items-center gap-2 mt-7 mb-3"><span class="text-lg">📦</span><h3 class="font-bold text-slate-700">其他</h3></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">${others.map(walletCard).join('')}</div>`;
+    }
+    html += `<p class="text-xs text-gray-400 mt-6">※ 金額為官方面額估算(保守下限)，實際以各官方公告為準。</p></div>`;
+
+    box.innerHTML = html;
+}
+
+/* ═══════════════ 1) 總覽首頁 + 特色推薦 ═══════════════ */
+function renderDashboard(){
+    const eligibleList = SUBSIDIES.filter(s=>eligible(s)&&isActive(s));
+    const maybeList    = SUBSIDIES.filter(s=>eligStatus(s)==='maybe'&&isActive(s));
+    const eligibleCount = eligibleList.length;
+    // 只從「真符合資格」的補助裡推薦，避免推到你領不到的（A3）
+    const recs = [...eligibleList].sort((a,b)=>scoreForUser(b)-scoreForUser(a)).slice(0,2);
+
+    // 省錢戰績計算（依已領取的補助估算省下金額）
+    const claimedSubs = SUBSIDIES.filter(s=>CLAIMED.has(s.id));
+    const savedByType = {};
+    let totalSaved = 0;
+    claimedSubs.forEach(s=>{ const v=Number(s.value_min)||0; totalSaved+=v; const k=s.use_type||'其他'; savedByType[k]=(savedByType[k]||0)+v; });
+
+    // 最近截止（開放中、依截止日排序）
+    const upcoming = SUBSIDIES.filter(s=>isActive(s)&&s.deadline)
+        .sort((a,b)=>a.deadline.localeCompare(b.deadline)).slice(0,3);
+
+    document.getElementById('view-dashboard').innerHTML = `
+        <div class="max-w-3xl mx-auto">
+            <div class="flex items-center justify-between mb-1">
+                <h2 class="text-2xl md:text-3xl font-bold">嗨，${USER.name} 👋</h2>
+                <a href="/logout" class="md:hidden text-xs text-red-500">登出</a>
+            </div>
+            <p class="text-gray-400 text-sm mb-6">${USER.age} 歲 · ${USER.city} · 對「${USER.interest||'—'}」有興趣</p>
+
+            <!-- 統計卡 -->
+            <div class="grid grid-cols-3 gap-3 mb-6">
+                <div onclick="document.getElementById('eligible-list').scrollIntoView({behavior:'smooth',block:'center'})" class="bg-white rounded-2xl p-4 shadow-card text-center cursor-pointer hover:shadow-glow transition">
+                    <div class="text-2xl font-bold text-brand">${eligibleCount}</div>
+                    <div class="text-xs text-gray-400 mt-1">你可申請 ›</div>
+                </div>
+                <div class="bg-white rounded-2xl p-4 shadow-card text-center">
+                    <div class="text-2xl font-bold text-slate-800">${CLAIMED.size}</div>
+                    <div class="text-xs text-gray-400 mt-1">已領取</div>
+                </div>
+                <div class="bg-white rounded-2xl p-4 shadow-card text-center">
+                    <div class="text-2xl font-bold text-slate-800">${SUBSIDIES.length}</div>
+                    <div class="text-xs text-gray-400 mt-1">總方案數</div>
+                </div>
+            </div>
+
+            <!-- ✅ 你符合資格的補助 -->
+            <div id="eligible-list" class="mb-6">
+                <h3 class="font-bold text-lg mb-3">✅ 你目前符合資格的 <span class="text-brand">${eligibleCount}</span> 筆補助</h3>
+                ${eligibleCount===0
+                    ? `<div class="bg-white rounded-2xl shadow-card p-6 text-center text-gray-400 text-sm">目前沒有完全符合的，試試到「找好康」放寬條件看看</div>`
+                    : `<div class="bg-white rounded-2xl shadow-card divide-y divide-gray-50">
+                        ${eligibleList.map(s=>`
+                        <div onclick="openDetail(${s.id})" class="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 transition first:rounded-t-2xl last:rounded-b-2xl">
+                            <span class="text-2xl shrink-0">${s.icon}</span>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-bold text-sm truncate">${s.title}</div>
+                                <div class="text-xs text-brand-dark font-bold mt-0.5">${s.amount}</div>
+                            </div>
+                            ${statusBadge(s)}
+                            <i class="fas fa-chevron-right text-gray-300 shrink-0"></i>
+                        </div>`).join('')}
+                    </div>`}
+                ${maybeList.length ? `
+                <h4 class="font-bold text-sm text-amber-600 mt-5 mb-2">🟡 可能符合（需確認資格）</h4>
+                <div class="bg-amber-50/70 rounded-2xl border border-amber-100 divide-y divide-amber-100">
+                    ${maybeList.map(s=>`
+                    <div onclick="openDetail(${s.id})" class="flex items-center gap-3 p-4 cursor-pointer hover:bg-amber-50 transition first:rounded-t-2xl last:rounded-b-2xl">
+                        <span class="text-2xl shrink-0">${s.icon}</span>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-bold text-sm truncate">${s.title}</div>
+                            <div class="text-xs text-amber-700 mt-0.5">部分族群不限年齡（如身障、原民、特定身分），點開確認資格</div>
+                        </div>
+                        <i class="fas fa-chevron-right text-amber-300 shrink-0"></i>
+                    </div>`).join('')}
+                </div>` : ''}
+            </div>
+
+            <!-- 💰 省錢戰績 -->
+            <div class="bg-gradient-to-br from-amber-50 to-white border border-amber-100 rounded-2xl p-5 shadow-card mb-6">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-bold text-lg">💰 我的省錢戰績</h3>
+                    <span class="text-xs text-gray-400">已領 ${CLAIMED.size} 項</span>
+                </div>
+                <div class="flex items-center gap-5">
+                    <div class="w-28 h-28 shrink-0 relative">
+                        <canvas id="savingsChart"></canvas>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-3xl font-extrabold text-amber-600">$${totalSaved.toLocaleString()}</div>
+                        <p class="text-sm text-gray-500 mt-1 leading-relaxed">
+                            ${totalSaved>0
+                                ? `🎉 你已把握 <b>${CLAIMED.size}</b> 項福利，換算約 <b class="text-amber-600">$${totalSaved.toLocaleString()}</b>（保守估計）。到「找好康」看看還有哪些能領！`
+                                : '開始到「找好康」領券，把該拿的福利換算成看得見的省錢戰績吧！'}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 你可能會喜歡 -->
+            <h3 class="font-bold text-lg mb-3">✨ 你可能會喜歡</h3>
+            <div class="space-y-3 mb-8">
+                ${recs.map(s=>`
+                    <div onclick="openDetail(${s.id})" class="bg-gradient-to-br from-brand/10 to-white border border-brand/20 rounded-2xl p-4 shadow-card cursor-pointer hover:shadow-glow transition active:scale-[0.99]">
+                        <div class="flex items-start gap-3">
+                            <div class="text-3xl">${s.icon}</div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="font-bold">${s.title}</span>
+                                    ${statusBadge(s)}
+                                </div>
+                                <div class="text-brand-dark font-bold text-sm mt-1">${s.amount}</div>
+                                <p class="text-gray-500 text-sm mt-1 line-clamp-2">${s.description}</p>
+                            </div>
+                            <i class="fas fa-chevron-right text-gray-300 mt-2"></i>
+                        </div>
+                    </div>`).join('')}
+            </div>
+
+            <!-- 即將截止 -->
+            <h3 class="font-bold text-lg mb-3">⏰ 記得別錯過</h3>
+            <div class="bg-white rounded-2xl shadow-card divide-y divide-gray-50">
+                ${upcoming.map(s=>`
+                    <div onclick="openDetail(${s.id})" class="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 transition first:rounded-t-2xl last:rounded-b-2xl">
+                        <span class="text-xl">${s.icon}</span>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-medium text-sm truncate">${s.title}</div>
+                            <div class="text-xs text-gray-400">截止 ${fmtDate(s.deadline)}</div>
+                        </div>
+                        <button onclick="event.stopPropagation();addToCalendar(${s.id})" class="text-brand text-sm font-bold whitespace-nowrap"><i class="far fa-calendar-plus"></i> 提醒</button>
+                    </div>`).join('')}
+            </div>
+        </div>`;
+
+    initSavingsChart(savedByType);   // 畫省錢戰績圓餅圖
+}
+
+/* ═══════════════ 2) 補助快篩（篩選 + 懶人包）═══════════════ */
+let CUR_SCOPE=['點數','節慶'], CUR_TITLE='🎟️ 點數與票券快篩', CUR_SUB='找可以花掉的點數、票券與近期限定活動';
+function renderSearch(types, title, sub){
+    if(types){ CUR_SCOPE=types; CUR_TITLE=title; CUR_SUB=sub; }
+    document.getElementById('view-search').innerHTML = `
+        <div class="max-w-3xl mx-auto">
+            <h2 class="text-2xl md:text-3xl font-bold mb-1">${CUR_TITLE}</h2>
+            <p class="text-gray-400 text-sm mb-5">${CUR_SUB}</p>
+
+            <div class="bg-white rounded-2xl p-4 shadow-card mb-4">
+                <div class="relative mb-3">
+                    <i class="fas fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input id="f-q" oninput="runFilter()" type="text" placeholder="搜尋補助名稱或關鍵字…" class="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-xl text-base focus:ring-2 focus:ring-brand outline-none">
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                        <label class="text-sm text-gray-500 font-bold">年齡</label>
+                        <input id="f-age" oninput="runFilter()" type="number" value="${USER.age??''}" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-base focus:ring-2 focus:ring-brand outline-none">
+                    </div>
+                    <div>
+                        <label class="text-sm text-gray-500 font-bold">縣市</label>
+                        <select id="f-city" onchange="runFilter()" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-base focus:ring-2 focus:ring-brand outline-none">
+                            ${Object.keys(CITY_CENTER).map(c=>`<option ${c===USER.city?'selected':''}>${c}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm text-gray-500 font-bold">興趣類別</label>
+                        <select id="f-cat" onchange="runFilter()" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-base focus:ring-2 focus:ring-brand outline-none">
+                            <option value="">全部</option>
+                            ${Object.keys(CAT_ICON).map(c=>`<option value="${c}" ${c===USER.interest?'selected':''}>${CAT_ICON[c]} ${c}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <label class="flex items-center gap-1.5 text-sm text-gray-600 pb-2 cursor-pointer">
+                            <input id="f-active" onchange="runFilter()" type="checkbox" checked class="accent-brand w-4 h-4"> 只看開放中
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="mb-4">
+                <span id="result-count" class="text-sm text-gray-500 font-bold"></span>
+            </div>
+            <div id="search-results" class="space-y-3"></div>
+        </div>`;
+    runFilter();
+}
+
+function runFilter(){
+    const age = parseInt(document.getElementById('f-age').value);
+    const city = document.getElementById('f-city').value;
+    const cat = document.getElementById('f-cat').value;
+    const onlyActive = document.getElementById('f-active').checked;
+    const q = (document.getElementById('f-q')?.value || '').trim().toLowerCase();
+
+    let list = SUBSIDIES.filter(s=>{
+        const okScope = !CUR_SCOPE || CUR_SCOPE.includes(s.use_type);
+        const okAge = isNaN(age) || (age>=s.min_age && age<=s.max_age) || s.age_flex==1;  // 有身分別例外不硬排除（A2）
+        const okCity = s.target_city==='全台' || s.target_city===city;
+        const okCat = !cat || s.category===cat;
+        const okAct = !onlyActive || isActive(s);
+        const okQ = !q || `${s.title} ${s.description||''} ${s.amount||''} ${s.category||''}`.toLowerCase().includes(q);
+        return okScope && okAge && okCity && okCat && okAct && okQ;
+    }).sort((a,b)=>scoreForUser(b)-scoreForUser(a));
+
+    document.getElementById('result-count').textContent = `找到 ${list.length} 筆`;
+    const box = document.getElementById('search-results');
+    if(list.length===0){
+        box.innerHTML = `<div class="text-center text-gray-400 py-12">😅 沒有符合的補助，試著放寬條件看看</div>`;
+        return;
+    }
+    box.innerHTML = list.map(s=>`
+        <div onclick="openDetail(${s.id})" class="bg-white rounded-2xl p-4 shadow-card cursor-pointer hover:shadow-md transition active:scale-[0.99] flex items-start gap-3">
+            <div class="text-3xl">${s.icon}</div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold">${s.title}</span>
+                    ${statusBadge(s)}
+                    ${CLAIMED.has(s.id)?'<span class="text-xs bg-brand/15 text-brand font-bold px-2 py-0.5 rounded-full">已領取</span>':''}
+                </div>
+                <div class="text-brand-dark font-bold text-sm mt-1">${s.amount}</div>
+                <p class="text-gray-500 text-sm mt-1 line-clamp-2">${s.description}</p>
+                <div class="text-xs text-gray-400 mt-2">
+                    <i class="far fa-user"></i> ${s.min_age}${s.max_age>=999?'歲以上':'-'+s.max_age+'歲'}
+                    · <i class="fas fa-location-dot"></i> ${s.target_city}
+                    · <i class="far fa-clock"></i> ${fmtDate(s.deadline)} 截止${s.age_flex==1?' · <span class="text-amber-600 font-bold">部分族群不限齡</span>':''}
+                </div>
+            </div>
+        </div>`).join('');
+}
+
+/* ═══════════════ 懶人包 詳情彈窗（含日曆、官網、領取）═══════════════ */
+function openDetail(id){
+    const s = SUBSIDIES.find(x=>x.id===id);
+    const claimed = CLAIMED.has(id);
+    const st = eligStatus(s);
+    const eligBanner = st==='yes'
+        ? '<div class="bg-green-50 text-green-700 text-sm font-bold px-6 py-3 flex items-center gap-2"><i class="fas fa-circle-check"></i> 你符合資格，可以領取</div>'
+        : st==='maybe'
+        ? '<div class="bg-amber-50 text-amber-700 text-sm font-bold px-6 py-3 flex items-center gap-2"><i class="fas fa-circle-question"></i> 部分族群不限年齡（身障／原民／特定身分），請確認資格</div>'
+        : '<div class="bg-red-50 text-red-600 text-sm font-bold px-6 py-3 flex items-center gap-2"><i class="fas fa-triangle-exclamation"></i> 你目前不符資格（年齡或縣市不符），仍可加入券包但請先確認</div>';
+    document.getElementById('detail-body').innerHTML = `
+        <div class="sticky top-0 bg-gradient-to-br from-brand to-brand-dark text-white p-6 rounded-t-3xl">
+            <button onclick="closeDetail()" class="absolute top-4 right-4 text-white/80 hover:text-white text-xl">✕</button>
+            <div class="text-4xl mb-2">${s.icon}</div>
+            <h3 class="text-xl font-bold">${s.title}</h3>
+            <div class="mt-2 flex items-center gap-2 flex-wrap">
+                ${statusBadge(s)}
+                <span class="text-white/90 text-sm font-bold">${s.amount}</span>
+            </div>
+        </div>
+        ${eligBanner}
+        <div class="p-6 space-y-5">
+            <div>
+                <div class="text-xs font-bold text-brand mb-1"><i class="fas fa-lightbulb"></i> 白話懶人包</div>
+                <p class="text-sm text-slate-700 leading-relaxed">${s.description}</p>
+            </div>
+            <div class="grid grid-cols-2 gap-3 text-sm">
+                <div class="bg-surface rounded-xl p-3">
+                    <div class="text-xs text-gray-400">適用年齡</div>
+                    <div class="font-bold">${s.min_age}${s.max_age>=999?' 歲以上':' - '+s.max_age+' 歲'}</div>
+                </div>
+                <div class="bg-surface rounded-xl p-3">
+                    <div class="text-xs text-gray-400">適用地區</div>
+                    <div class="font-bold">${s.target_city}</div>
+                </div>
+                <div class="bg-surface rounded-xl p-3">
+                    <div class="text-xs text-gray-400">開放日期</div>
+                    <div class="font-bold">${fmtDate(s.start_date)}</div>
+                </div>
+                <div class="bg-surface rounded-xl p-3">
+                    <div class="text-xs text-gray-400">截止日期</div>
+                    <div class="font-bold text-brand-dark">${fmtDate(s.deadline)}</div>
+                </div>
+            </div>
+            <div>
+                <div class="text-xs font-bold text-slate-500 mb-1"><i class="fas fa-list-check"></i> 怎麼領</div>
+                <p class="text-sm text-slate-600 leading-relaxed">${s.how_to}</p>
+            </div>
+            ${s.notes?`<div class="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                <div class="text-xs font-bold text-amber-600 mb-1"><i class="fas fa-star"></i> 加碼／注意</div>
+                <p class="text-sm text-amber-800 leading-relaxed">${s.notes}</p>
+            </div>`:''}
+
+            <div class="grid grid-cols-2 gap-3 pt-1">
+                <a href="${s.url}" target="_blank" rel="noopener" class="flex items-center justify-center gap-2 bg-slate-800 text-white text-sm font-bold py-3 rounded-xl hover:bg-slate-700 transition">
+                    <i class="fas fa-arrow-up-right-from-square"></i> 前往官網
+                </a>
+                <button onclick="addToCalendar(${s.id})" class="flex items-center justify-center gap-2 border border-brand text-brand text-sm font-bold py-3 rounded-xl hover:bg-brand/5 transition">
+                    <i class="far fa-calendar-plus"></i> 加入日曆
+                </button>
+            </div>
+            <button onclick="toggleClaim(${s.id})" id="claim-btn" class="w-full text-sm font-bold py-3 rounded-xl transition ${claimed?'bg-brand/15 text-brand':'bg-brand text-white hover:bg-brand-dark'}">
+                ${claimed?'✓ 已加入我的券包（點擊取消）':'＋ 我要領取 / 加入券包'}
+            </button>
+            <button onclick="downloadICS(${s.id})" class="w-full text-sm text-brand font-bold hover:text-brand-dark transition"><i class="far fa-bell"></i> 下載提醒檔（前 7 天・前 3 天・當天，匯入手機／Google 日曆）</button>
+        </div>`;
+    document.getElementById('detail-modal').classList.remove('hidden');
+}
+function closeDetail(){ document.getElementById('detail-modal').classList.add('hidden'); }
+
+/* 領取／取消（存到後端，供行程規劃使用）*/
+async function toggleClaim(id){
+    const res = await fetch('/claim', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ subsidy_id:id })
+    });
+    if(!res.ok){ alert('操作失敗'); return; }
+    const data = await res.json();
+    if(data.claimed) CLAIMED.add(id); else CLAIMED.delete(id);
+    openDetail(id);      // 重繪彈窗
+    renderDashboard();   // 更新統計
+    if(!document.getElementById('view-search').classList.contains('hidden')) runFilter();
+}
+
+/* ═══════════════ 3) 日曆提醒（Google 日曆連結 + .ics 下載）═══════════════ */
+function addToCalendar(id){
+    const s = SUBSIDIES.find(x=>x.id===id);
+    const start = s.deadline.replace(/-/g,'');
+    // 結束日 = 截止日 +1（Google 全天事件為結束日不含當日）
+    const d = new Date(s.deadline); d.setDate(d.getDate()+1);
+    const end = d.toISOString().slice(0,10).replace(/-/g,'');
+    const title = encodeURIComponent(`⏰ ${s.title} 補助截止日`);
+    const details = encodeURIComponent(`${s.description}\n\n官網：${s.url}`);
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}`;
+    window.open(url, '_blank');
+}
+/* .ics 文字跳脫（逗號、分號、反斜線、換行都要處理，否則有些日曆會解析錯） */
+function icsEsc(t){ return String(t||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n'); }
+function downloadICS(id){
+    const s = SUBSIDIES.find(x=>x.id===id);
+    const start = s.deadline.replace(/-/g,'');
+    const d = new Date(s.deadline); d.setDate(d.getDate()+1);
+    const end = d.toISOString().slice(0,10).replace(/-/g,'');
+    const stamp = new Date().toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
+    // 一顆提醒 = 一組 VALARM。TRIGGER 相對於截止日 00:00：
+    //   -P7D＝前 7 天、-P3D＝前 3 天、PT9H＝截止日當天早上 9 點。
+    //   要改天數/時間只要改下面三行的 TRIGGER（例如前 5 天就寫 -P5D）。
+    const alarm = (trig,msg)=>['BEGIN:VALARM',`TRIGGER:${trig}`,'ACTION:DISPLAY',`DESCRIPTION:${icsEsc(msg)}`,'END:VALARM'];
+    const ics = [
+        'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//幣須知道//TW//ZH','CALSCALE:GREGORIAN','BEGIN:VEVENT',
+        `UID:${id}-${start}@bishu.tw`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART;VALUE=DATE:${start}`,`DTEND;VALUE=DATE:${end}`,
+        `SUMMARY:⏰ ${icsEsc(s.title)} 補助截止日`,
+        `DESCRIPTION:${icsEsc(s.description)} 官網 ${icsEsc(s.url)}`,
+        ...alarm('-P7D', `還有 7 天！「${s.title}」即將截止`),
+        ...alarm('-P3D', `剩 3 天！「${s.title}」快截止了`),
+        ...alarm('PT9H', `今天是最後期限：「${s.title}」`),
+        'END:VEVENT','END:VCALENDAR'
+    ].join('\r\n');
+    const blob = new Blob([ics], {type:'text/calendar'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${s.title}.ics`;
+    a.click();
+}
+
+/* ═══════════════ 4) 消費地圖（Google Maps 或 Leaflet；離我最近）═══════════════
+   有 GOOGLE_MAPS_API_KEY → 用 Google 地圖底圖；沒填 → 自動退回 Leaflet+OSM。
+   兩種底圖都：依卡別分色圓點、popup 帶「導航」按鈕、定位我＋找最近店家。       */
+let mapMarkers = [];          // Leaflet 圖層 / Google marker（與 currentList 同索引）
+let currentList = [];         // 目前顯示的店家（已篩選、定位後依距離排序）
+let activeCoin  = '全部';      // 目前選的卡別
+let activeCity  = '全部';      // 目前選的縣市
+let userLoc     = null;       // 定位後的使用者座標 {lat,lng}
+let gInfoWin    = null;        // Google 共用 InfoWindow
+let gMeMarker   = null, gMeLine = null;   // Google 定位我用
+let meLeaflet   = [];          // Leaflet 定位我圖層（重新定位時清掉）
+const COIN_META = {
+    '藝文':{icon:'🎭',color:'#EC6B8E'},
+    '運動':{icon:'🏃',color:'#22B8C1'},
+    '旅遊':{icon:'🌾',color:'#3FB984'},
+    '運動卡':{icon:'🏟️',color:'#F0A93B'},
+    'YouBike':{icon:'🚲',color:'#7C6BF0'},
+};
+/* 店家 popup 內容（含導航按鈕，兩種底圖共用） */
+function storePopupHtml(s, meta){
+    return `<b>${meta.icon} ${s.name}</b><br>`
+         + `<span style="color:#888">${s.city}${s.district} · ${s.coin_type}</span><br>${s.note}`
+         + `<br><a href="${navUrl(s.lat,s.lng,s.name)}" target="_blank" rel="noopener"`
+         + ` style="display:inline-block;margin-top:6px;color:#1a73e8;font-weight:700;text-decoration:none">`
+         + `<i class="fas fa-diamond-turn-right"></i> 用 Google 地圖導航</a>`;
+}
+function initMap(){
+    if(!document.getElementById('view-map').innerHTML.trim()){
+        // 依店家資料動態產生縣市快篩 chip（全部 + 有店家的縣市）
+        const cities = ['全部', ...new Set(STORES.map(s=>s.city))];
+        const cityChips = cities.map(c=>
+            `<button data-city="${c}" onclick="filterCity('${c}')" class="city-btn whitespace-nowrap text-[15px] px-4 py-1.5 rounded-full font-bold">${c}</button>`
+        ).join('');
+        document.getElementById('view-map').innerHTML = `
+            <div class="max-w-5xl mx-auto w-full flex flex-col">
+                <h2 class="text-2xl md:text-3xl font-bold mb-1">📍 消費地圖</h2>
+                <p class="text-gray-500 text-base mb-3">點清單卡片會飛到地圖，左側色條代表卡別；按「定位我」依距離排序</p>
+                <div class="flex gap-2 mb-2 overflow-x-auto no-scrollbar pb-1">
+                    <button data-coin="全部" onclick="filterMap('全部')" class="coin-btn whitespace-nowrap text-[15px] px-4 py-2 rounded-full font-bold">全部</button>
+                    <button data-coin="藝文" onclick="filterMap('藝文')" class="coin-btn whitespace-nowrap text-[15px] px-4 py-2 rounded-full font-bold">🎭 藝文</button>
+                    <button data-coin="運動" onclick="filterMap('運動')" class="coin-btn whitespace-nowrap text-[15px] px-4 py-2 rounded-full font-bold">🏃 運動</button>
+                    <button data-coin="旅遊" onclick="filterMap('旅遊')" class="coin-btn whitespace-nowrap text-[15px] px-4 py-2 rounded-full font-bold">🌾 旅遊</button>
+                    <button data-coin="運動卡" onclick="filterMap('運動卡')" class="coin-btn whitespace-nowrap text-[15px] px-4 py-2 rounded-full font-bold">🏟️ 運動卡場館</button>
+                    <button data-coin="YouBike" onclick="filterMap('YouBike')" class="coin-btn whitespace-nowrap text-[15px] px-4 py-2 rounded-full font-bold">🚲 YouBike</button>
+                    <button onclick="locateMe()" class="whitespace-nowrap text-[15px] px-4 py-2 rounded-full font-bold bg-blue-500 text-white"><i class="fas fa-crosshairs"></i> 定位我</button>
+                </div>
+                <div class="flex gap-2 mb-3 overflow-x-auto no-scrollbar pb-1 items-center">
+                    <span class="text-sm text-gray-500 font-bold whitespace-nowrap mr-1"><i class="fas fa-location-dot"></i> 縣市</span>
+                    ${cityChips}
+                </div>
+                <div class="flex flex-col md:flex-row gap-4">
+                    <div id="store-list" class="order-2 md:order-1 w-full md:w-96 flex-shrink-0 max-h-[50vh] md:max-h-none md:h-[480px] overflow-y-auto flex flex-col gap-2.5 pr-1"></div>
+                    <div class="order-1 md:order-2 w-full md:flex-1 h-[340px] md:h-[480px] rounded-2xl overflow-hidden shadow-card"><div id="map"></div></div>
+                </div>
+                <p class="text-xs text-gray-400 mt-2">※ 店家為示範座標，實際合作店家請查各補助官方清單。</p>
+            </div>`;
+    }
+    const center = CITY_CENTER[USER.city] || CITY_CENTER['全台'];
+    const zoom = USER.city==='全台'?7:12;
+    if(USE_GMAPS){
+        loadGmaps().then(g=>{
+            if(!mapObj){
+                mapObj = new g.maps.Map(document.getElementById('map'),{
+                    center:{lat:center[0],lng:center[1]}, zoom,
+                    mapTypeControl:false, streetViewControl:false, fullscreenControl:false,
+                });
+                gInfoWin = new g.maps.InfoWindow();
+                filterMap('全部');
+            } else { g.maps.event.trigger(mapObj,'resize'); }
+        }).catch(()=>{ initMapLeaflet(center,zoom); });   // 金鑰無效時退回 Leaflet
+    } else {
+        initMapLeaflet(center,zoom);
+    }
+}
+function initMapLeaflet(center,zoom){
+    if(!mapObj){
+        mapObj = L.map('map').setView(center, zoom);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+            attribution:'© OpenStreetMap', maxZoom:19
+        }).addTo(mapObj);
+        mapObj._leaflet_engine = true;
+        filterMap('全部');
+    } else { mapObj.invalidateSize(); }
+}
+function isGmap(){ return USE_GMAPS && mapObj && !mapObj._leaflet_engine; }
+/* 依「已領取的券」推出哪些卡別的店家可用（錢包↔地圖連動） */
+function usableCoinTypes(){
+    const cats = new Set(SUBSIDIES.filter(s=>CLAIMED.has(s.id)).map(s=>s.category));
+    const set = new Set([...cats]);
+    if(cats.has('運動')) set.add('運動卡');   // 運動券也能用在運動卡場館
+    if(cats.has('旅遊')) set.add('YouBike');  // 旅遊相關也標 YouBike
+    return set;
+}
+/* 卡別 chip → 設定 activeCoin；縣市 chip → 設定 activeCity；兩者一起套用 */
+function filterMap(coin){ activeCoin = coin; applyFilter(); }
+function filterCity(city){ activeCity = city; applyFilter(); }
+function styleChips(){
+    document.querySelectorAll('.coin-btn').forEach(b=>{
+        const on=b.dataset.coin===activeCoin;
+        b.className=`coin-btn whitespace-nowrap text-[15px] px-4 py-2 rounded-full font-bold ${on?'bg-brand text-white':'bg-white text-slate-600 shadow-card'}`;
+    });
+    document.querySelectorAll('.city-btn').forEach(b=>{
+        const on=b.dataset.city===activeCity;
+        b.className=`city-btn whitespace-nowrap text-[15px] px-4 py-1.5 rounded-full font-bold ${on?'bg-slate-700 text-white':'bg-white text-slate-600 shadow-card'}`;
+    });
+}
+function applyFilter(){
+    if(!mapObj) return;
+    styleChips();
+    // 縣市 × 卡別 雙軸篩選；若已定位則加距離並由近到遠排序
+    let list = STORES.filter(s=>(activeCoin==='全部'||s.coin_type===activeCoin)
+                             && (activeCity==='全部'||s.city===activeCity));
+    if(userLoc){
+        list = list.map(s=>({...s, _d:haversine(userLoc.lat,userLoc.lng,s.lat,s.lng)}))
+                   .sort((a,b)=>a._d-b._d);
+    }
+    currentList = list;
+    const usable = usableCoinTypes();   // 有券可用的卡別 → 地圖上加綠框放大
+
+    if(isGmap()){
+        const g = window.google;
+        mapMarkers.forEach(m=>m.setMap(null)); mapMarkers=[];
+        const bounds = new g.maps.LatLngBounds();
+        list.forEach((s,i)=>{
+            const meta = COIN_META[s.coin_type] || {icon:'📍',color:'#3388ff'};
+            const use = usable.has(s.coin_type);
+            const m = new g.maps.Marker({
+                position:{lat:s.lat,lng:s.lng}, map:mapObj,
+                icon:{ path:g.maps.SymbolPath.CIRCLE, scale:use?11:8,
+                       fillColor:meta.color, fillOpacity:0.95,
+                       strokeColor:use?'#16a34a':'#fff', strokeWeight:use?3:2 },
+                title:s.name+(use?'（可用券）':''), zIndex:use?10:1,
+            });
+            m.addListener('click',()=>{ gInfoWin.setContent(storePopupHtml(s,meta)); gInfoWin.open(mapObj,m); highlightCard(i); });
+            mapMarkers.push(m); bounds.extend(m.getPosition());
+        });
+        if(list.length){ mapObj.fitBounds(bounds); if(list.length===1) mapObj.setZoom(14); }
+    } else {
+        mapMarkers.forEach(m=>mapObj.removeLayer(m)); mapMarkers=[];
+        const bounds=[];
+        list.forEach((s,i)=>{
+            const meta = COIN_META[s.coin_type] || {icon:'📍',color:'#3388ff'};   // 依卡別分色
+            const use = usable.has(s.coin_type);
+            const m=L.circleMarker([s.lat,s.lng],{radius:use?11:9, fillColor:meta.color, color:use?'#16a34a':'#fff', weight:use?3:2, fillOpacity:0.95}).addTo(mapObj)
+                .bindPopup(storePopupHtml(s,meta)).on('click',()=>highlightCard(i));
+            mapMarkers.push(m); bounds.push([s.lat,s.lng]);
+        });
+        if(bounds.length) mapObj.fitBounds(bounds,{padding:[40,40],maxZoom:13});
+    }
+    renderStoreList();
+}
+/* ── 店家列表（與地圖連動）── */
+function distLabel(s){
+    return (userLoc && s._d!=null)
+        ? `<span class="flex-shrink-0 text-blue-600 text-sm font-bold whitespace-nowrap"><i class="fas fa-location-dot"></i> ${s._d.toFixed(1)} km</span>`
+        : '';
+}
+function renderStoreList(){
+    const box = document.getElementById('store-list'); if(!box) return;
+    if(!currentList.length){
+        box.innerHTML = `<div class="text-sm text-gray-400 p-6 text-center">這個分類目前沒有店家</div>`;
+        return;
+    }
+    const usable = usableCoinTypes();
+    const hasUsable = currentList.some(s=>usable.has(s.coin_type));
+    const hint = hasUsable
+        ? `<div class="bg-green-50 border border-green-200 text-green-700 text-sm font-bold rounded-xl px-3 py-2 mb-1"><i class="fas fa-circle-check"></i> 綠框店家你有券可用</div>`
+        : '';
+    box.innerHTML = hint + currentList.map((s,i)=>{
+        const meta = COIN_META[s.coin_type] || {icon:'📍',color:'#3388ff'};
+        const use = usable.has(s.coin_type);
+        return `<div class="store-card cursor-pointer bg-white rounded-xl px-4 py-3 shadow-card hover:shadow-md transition" data-idx="${i}" onclick="focusStore(${i})" style="border-left:6px solid ${meta.color}${use?';box-shadow:0 0 0 2px #16a34a55':''}">
+            <div class="flex items-start justify-between gap-2">
+                <div class="font-bold text-lg text-slate-800 leading-snug">${s.name}</div>
+                ${distLabel(s)}
+            </div>
+            <div class="flex items-center flex-wrap gap-2 mt-1.5">
+                <span class="flex-shrink-0 text-sm font-bold px-2.5 py-1 rounded-full" style="background:${meta.color}1a;color:${meta.color}">${s.coin_type}</span>
+                ${use?`<span class="flex-shrink-0 text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full"><i class="fas fa-check"></i> 可用券</span>`:''}
+                <span class="text-sm text-gray-600">${s.city}${s.district || ''}</span>
+            </div>
+            <div class="text-sm text-gray-500 mt-1 leading-snug">${s.note}</div>
+            <a href="${navUrl(s.lat,s.lng,s.name)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"
+               class="mt-2.5 flex items-center justify-center gap-2 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold text-base py-2.5 rounded-xl">
+               <i class="fas fa-diamond-turn-right"></i> 用 Google 導航</a>
+        </div>`;
+    }).join('');
+}
+function highlightCard(i){
+    document.querySelectorAll('.store-card').forEach(c=>{ c.style.background=''; });
+    const card = document.querySelector(`.store-card[data-idx="${i}"]`);
+    if(card){ card.style.background='#FCEBED'; card.scrollIntoView({block:'nearest',behavior:'smooth'}); }
+}
+/* 點列表卡 → 地圖飛過去 + 開資訊卡 + 高亮 */
+function focusStore(i){
+    const s = currentList[i]; if(!s) return;
+    const meta = COIN_META[s.coin_type] || {icon:'📍',color:'#3388ff'};
+    const m = mapMarkers[i];
+    highlightCard(i);
+    if(isGmap()){
+        if(m){ mapObj.panTo(m.getPosition()); mapObj.setZoom(15); gInfoWin.setContent(storePopupHtml(s,meta)); gInfoWin.open(mapObj,m); }
+    } else {
+        mapObj.setView([s.lat,s.lng],15);
+        if(m) m.openPopup();
+    }
+}
+function locateMe(){
+    if(!navigator.geolocation){ alert('此裝置不支援定位'); return; }
+    navigator.geolocation.getCurrentPosition(pos=>{
+        const {latitude:la,longitude:ln}=pos.coords;
+        userLoc = {lat:la, lng:ln};
+        filterMap(activeCoin);            // 依距離重新排序清單 + 重畫點位
+        const nearest = currentList[0];   // 排序後第一筆即最近
+
+        if(isGmap()){
+            const g = window.google;
+            if(gMeMarker) gMeMarker.setMap(null);
+            if(gMeLine)   gMeLine.setMap(null);
+            gMeMarker = new g.maps.Marker({ position:{lat:la,lng:ln}, map:mapObj, title:'你在這裡',
+                icon:{ path:g.maps.SymbolPath.CIRCLE, scale:8, fillColor:'#3b82f6', fillOpacity:0.85, strokeColor:'#fff', strokeWeight:2 } });
+            mapObj.setCenter({lat:la,lng:ln}); mapObj.setZoom(13);
+            if(nearest){
+                gMeLine = new g.maps.Polyline({ map:mapObj, path:[{lat:la,lng:ln},{lat:nearest.lat,lng:nearest.lng}],
+                    strokeColor:'#3b82f6', strokeOpacity:0.7, strokeWeight:2 });
+            }
+        } else {
+            meLeaflet.forEach(l=>mapObj.removeLayer(l)); meLeaflet=[];
+            const me = L.circleMarker([la,ln],{radius:9,color:'#3b82f6',fillColor:'#3b82f6',fillOpacity:.8})
+                .addTo(mapObj).bindPopup('📍 你在這裡'); meLeaflet.push(me);
+            mapObj.setView([la,ln],13);
+            if(nearest){
+                const line=L.polyline([[la,ln],[nearest.lat,nearest.lng]],{color:'#3b82f6',dashArray:'6'}).addTo(mapObj);
+                meLeaflet.push(line);
+            }
+        }
+        if(nearest){ highlightCard(0); alert(`離你最近的是「${nearest.name}」，約 ${nearest._d.toFixed(1)} 公里（${nearest.coin_type}券）`); }
+    }, ()=>alert('無法取得定位，請確認已允許位置權限'));
+}
+
+/* ═══════════════ 5) 行程規劃（依已領取的券排一日遊）═══════════════ */
+/* 最近鄰重排：從第一站出發，每次接最近的下一站，讓路線不繞遠 */
+function nnSort(pts){
+    if(pts.length<=2) return pts;
+    const rest = pts.slice(), out=[rest.shift()];
+    while(rest.length){
+        const last=out[out.length-1];
+        let bi=0,bd=Infinity;
+        rest.forEach((p,i)=>{ const d=haversine(last.lat,last.lng,p.lat,p.lng); if(d<bd){bd=d;bi=i;} });
+        out.push(rest.splice(bi,1)[0]);
+    }
+    return out;
+}
+function renderItinerary(){
+    const box = document.getElementById('view-itinerary');
+    const claimedSubs = SUBSIDIES.filter(s=>CLAIMED.has(s.id));
+    // 只有「有店家可消費」的類別能排行程
+    const usableCats = [...new Set(claimedSubs.map(s=>s.category))].filter(c=>['藝文','運動','旅遊'].includes(c));
+
+    if(claimedSubs.length===0 || usableCats.length===0){
+        box.innerHTML = `
+            <div class="max-w-3xl mx-auto text-center py-16">
+                <div class="text-5xl mb-4">🗺️</div>
+                <h2 class="text-2xl font-bold mb-2">還沒有可規劃的行程</h2>
+                <p class="text-gray-400 text-sm mb-6">到「補助快篩」把想用的券加入券包<br>（例如文化幣、運動幣、客家幣），就能自動幫你排一日遊！</p>
+                <button onclick="navigate('points')" class="bg-brand text-white font-bold px-6 py-3 rounded-xl hover:bg-brand-dark transition">去挑選補助 →</button>
+            </div>`;
+        return;
+    }
+
+    // 依使用者縣市挑店家（不夠再補全台）
+    let picks=[];
+    usableCats.forEach(cat=>{
+        let inCity = STORES.filter(s=>s.coin_type===cat && s.city===USER.city);
+        let others = STORES.filter(s=>s.coin_type===cat && s.city!==USER.city);
+        picks = picks.concat(inCity.length?inCity.slice(0,2):others.slice(0,1));
+    });
+    picks = nnSort(picks.slice(0,4));   // 依最近鄰重排，路線更順
+    const times = ['10:00','12:30','15:00','17:30'];
+
+    box.innerHTML = `
+        <div class="max-w-3xl mx-auto">
+            <h2 class="text-2xl md:text-3xl font-bold mb-1">🧭 為你排的一日遊</h2>
+            <p class="text-gray-400 text-sm mb-5">用你券包裡的 ${claimedSubs.map(s=>s.icon).join(' ')} 串成路線</p>
+
+            <div class="rounded-2xl overflow-hidden shadow-card h-64 mb-5"><div id="trip-map"></div></div>
+
+            <div class="relative pl-6">
+                <div class="absolute left-[7px] top-2 bottom-2 w-0.5 bg-brand/30"></div>
+                ${picks.map((s,i)=>`
+                    <div class="relative mb-4">
+                        <div class="absolute -left-6 top-1 w-4 h-4 rounded-full bg-brand border-2 border-white shadow"></div>
+                        <div class="bg-white rounded-2xl p-4 shadow-card">
+                            <div class="flex items-center justify-between">
+                                <span class="text-brand font-bold text-sm">${times[i]||''}</span>
+                                <span class="text-xs bg-brand/10 text-brand px-2 py-0.5 rounded-full font-bold">${CAT_ICON[s.coin_type]} ${s.coin_type}券</span>
+                            </div>
+                            <div class="font-bold mt-1">${s.name}</div>
+                            <div class="text-sm text-gray-500 mt-0.5">${s.city}${s.district} · ${s.note}</div>
+                            <a href="${navUrl(s.lat,s.lng,s.name)}" target="_blank" rel="noopener"
+                               class="inline-flex items-center gap-1 mt-2 text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg"><i class="fas fa-diamond-turn-right"></i> 導航到這</a>
+                        </div>
+                    </div>`).join('')}
+            </div>
+            <a href="${tripNavUrl(picks)}" target="_blank" rel="noopener"
+               class="mt-2 inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-bold text-sm px-4 py-2 rounded-xl transition">
+               <i class="fas fa-diamond-turn-right"></i> 用 Google 地圖導航整條路線
+            </a>
+            <p class="text-xs text-gray-300 mt-2">※ 行程為示範建議，店家座標僅供參考。</p>
+        </div>`;
+
+    setTimeout(()=>buildTripMap(picks), 120);
+}
+/* 整條路線導航連結：起點＝目前位置，中途點＝前面站，終點＝最後一站 */
+function tripNavUrl(picks){
+    if(!picks.length) return '#';
+    const dest = picks[picks.length-1];
+    const wps  = picks.slice(0,-1).map(s=>`${s.lat},${s.lng}`).join('|');
+    let u = `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}`;
+    if(wps) u += `&waypoints=${encodeURIComponent(wps)}`;
+    return u;
+}
+/* 行程地圖：有金鑰用 Google（Directions 真實路線），沒填退回 Leaflet 直線 */
+function buildTripMap(picks){
+    if(!picks.length) return;
+    if(USE_GMAPS){
+        loadGmaps().then(g=>{
+            tripMapObj = new g.maps.Map(document.getElementById('trip-map'),{
+                center:{lat:picks[0].lat,lng:picks[0].lng}, zoom:12,
+                mapTypeControl:false, streetViewControl:false, fullscreenControl:false,
+            });
+            picks.forEach((s,i)=>{
+                new g.maps.Marker({ position:{lat:s.lat,lng:s.lng}, map:tripMapObj, label:`${i+1}`, title:s.name });
+            });
+            if(picks.length>1){
+                // Directions：第一站為起點、最後站為終點、中間為 waypoints
+                const ds = new g.maps.DirectionsService();
+                const dr = new g.maps.DirectionsRenderer({ map:tripMapObj, suppressMarkers:true,
+                    polylineOptions:{ strokeColor:'#E2858E', strokeWeight:4 } });
+                ds.route({
+                    origin:{lat:picks[0].lat,lng:picks[0].lng},
+                    destination:{lat:picks[picks.length-1].lat,lng:picks[picks.length-1].lng},
+                    waypoints:picks.slice(1,-1).map(s=>({location:{lat:s.lat,lng:s.lng}})),
+                    travelMode:g.maps.TravelMode.DRIVING,   // 大眾運輸模式不支援中途點，改用道路路線畫線
+                },(res,status)=>{
+                    if(status==='OK'){ dr.setDirections(res); }
+                    else { drawTripFallbackLine(g, picks); }   // 算不出就退回直線
+                });
+            } else {
+                const b=new g.maps.LatLngBounds(); picks.forEach(s=>b.extend({lat:s.lat,lng:s.lng})); tripMapObj.fitBounds(b);
+            }
+        }).catch(()=>buildTripMapLeaflet(picks));
+    } else {
+        buildTripMapLeaflet(picks);
+    }
+}
+function drawTripFallbackLine(g, picks){
+    new g.maps.Polyline({ map:tripMapObj, path:picks.map(s=>({lat:s.lat,lng:s.lng})),
+        strokeColor:'#E2858E', strokeWeight:3 });
+    const b=new g.maps.LatLngBounds(); picks.forEach(s=>b.extend({lat:s.lat,lng:s.lng})); tripMapObj.fitBounds(b);
+}
+function buildTripMapLeaflet(picks){
+    if(tripMapObj){ tripMapObj.remove(); tripMapObj=null; }
+    tripMapObj = L.map('trip-map').setView([picks[0].lat,picks[0].lng],12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(tripMapObj);
+    const path=[];
+    picks.forEach((s,i)=>{
+        L.marker([s.lat,s.lng]).addTo(tripMapObj).bindPopup(`<b>${i+1}. ${s.name}</b>`);
+        path.push([s.lat,s.lng]);
+    });
+    if(path.length>1) L.polyline(path,{color:'#E2858E',weight:3}).addTo(tripMapObj);
+    tripMapObj.fitBounds(path,{padding:[30,30],maxZoom:12});
+}
+
+/* ═══════════════ 啟動 ═══════════════ */
+renderDashboard();
+renderSearch();
+navigate('dashboard');
+</script>
+{% endif %}
+</body>
+</html>
